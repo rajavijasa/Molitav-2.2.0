@@ -31,9 +31,9 @@ class GraphDataStorage {
     } else {
       final lastTimestamp = _timestampStorage[key]!.last;
       final valueChanged = _lastValues[key] != value;
-      final oneMinuteHasPassed = now.difference(lastTimestamp).inMinutes >= 1;
+      final fifteenMinuteHasPassed = now.difference(lastTimestamp).inMinutes >= 15;
 
-      if (valueChanged || oneMinuteHasPassed) {
+      if (valueChanged || fifteenMinuteHasPassed) {
         _dataStorage[key]!.add(value);
         _timestampStorage[key]!.add(now);
         _lastValues[key] = value;
@@ -41,11 +41,11 @@ class GraphDataStorage {
     }
 
   // --- PERUBAHAN LOGIKA PEMBERSIHAN DATA ---
-  final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
+  final oneHourAgo = now.subtract(const Duration(minutes: 60));
   // Hapus data lama, TAPI sisakan satu titik sebagai "anchor" di luar batas kiri.
   // Kita periksa titik KEDUA. Jika titik kedua sudah terlalu tua, maka titik pertama aman untuk dihapus.
     while (_timestampStorage[key]!.length > 1 &&
-        _timestampStorage[key]![1].isBefore(fiveMinutesAgo)) {
+        _timestampStorage[key]![1].isBefore(oneHourAgo)) {
       _timestampStorage[key]!.removeAt(0);
       _dataStorage[key]!.removeAt(0);
     }
@@ -402,7 +402,7 @@ class _HealthDataCardState extends State<HealthDataCard> {
     final condition = _getCondition(widget.title, widget.currentValue);
 
     // Menghitung waktu 5 menit yang lalu (bukan 1 jam)
-    final fiveMinutesAgo = _currentTime.subtract(const Duration(minutes: 5));
+    final oneHourAgo = _currentTime.subtract(const Duration(minutes: 60));
     
     return Container(
       padding: const EdgeInsets.all(16),
@@ -472,14 +472,14 @@ class _HealthDataCardState extends State<HealthDataCard> {
                         
                         // Cari data point terdekat
                         final now = DateTime.now();
-                        final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
-                        final totalDuration = now.difference(fiveMinutesAgo).inMilliseconds;
+                        final oneHourAgo = now.subtract(const Duration(minutes: 60));
+                        final totalDuration = now.difference(oneHourAgo).inMilliseconds;
                         
                         int closestIndex = 0;
                         double minDistance = double.infinity;
                         
                         for (int i = 0; i < timestamps.length; i++) {
-                          final timeDiff = timestamps[i].difference(fiveMinutesAgo).inMilliseconds;
+                          final timeDiff = timestamps[i].difference(oneHourAgo).inMilliseconds;
                           final pointX = (timeDiff / totalDuration);
                           final distance = (pointX - relativeX).abs();
                           
@@ -522,7 +522,7 @@ class _HealthDataCardState extends State<HealthDataCard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(_formatTime(fiveMinutesAgo), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+              Text(_formatTime(oneHourAgo), style: const TextStyle(color: Colors.grey, fontSize: 12)),
               Text(_formatTime(_currentTime), style: const TextStyle(color: Colors.grey, fontSize: 12)),
             ],
           )
@@ -594,8 +594,8 @@ class GraphPainter extends CustomPainter {
 
     // Hitung rentang waktu 5 menit untuk positioning yang akurat
     final now = DateTime.now();
-    final fiveMinutesAgo = now.subtract(const Duration(minutes: 5));
-    final totalDuration = now.difference(fiveMinutesAgo).inMilliseconds;
+    final oneHourAgo = now.subtract(const Duration(minutes: 60));
+    final totalDuration = now.difference(oneHourAgo).inMilliseconds;
 
     // Kumpulkan semua data points yang valid dengan positioning akurat berdasarkan timestamp
     for (int i = 0; i < historicalData.length; i++) {
@@ -605,7 +605,7 @@ class GraphPainter extends CustomPainter {
       if (value > 0.0 && !value.isNaN) {
         // --- PERUBAHAN DIMULAI DI SINI ---
         // Hitung posisi X berdasarkan timestamp relatif dalam rentang 5 menit
-        final timeDiff = timestamp.difference(fiveMinutesAgo).inMilliseconds;
+        final timeDiff = timestamp.difference(oneHourAgo).inMilliseconds;
         // HAPUS .clamp() agar titik bisa dihitung di luar batas kiri (x < 0)
         final x = (timeDiff / totalDuration) * size.width;
         // --- AKHIR DARI PERUBAHAN ---
