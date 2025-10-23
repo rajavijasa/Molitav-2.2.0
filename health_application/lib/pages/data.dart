@@ -20,31 +20,22 @@ class GraphDataStorage {
     return _timestampStorage[key] ?? [];
   }
 
-  static void addData(String key, double value) {
-    final now = DateTime.now();
+  static void addData(String key, double value, [DateTime? timestamp]) {
+    final now = timestamp ?? DateTime.now(); // Gunakan timestamp yang diberikan, atau buat baru
 
-    // Jika belum ada data sama sekali untuk key ini, tambahkan data pertama
-    if (!_dataStorage.containsKey(key) || _dataStorage[key]!.isEmpty) {
-      _dataStorage[key] = [value];
-      _timestampStorage[key] = [now];
-      _lastValues[key] = value;
-    } else {
-      final lastTimestamp = _timestampStorage[key]!.last;
-      final valueChanged = _lastValues[key] != value;
-      final fifteenMinuteHasPassed = now.difference(lastTimestamp).inMinutes >= 15;
+    // Logika baru: Langsung tambahkan data. Keputusan *kapan* menambahkan
+    // sudah dibuat oleh fungsi _updateAllGraphData.
+    _dataStorage.putIfAbsent(key, () => []).add(value);
+    _timestampStorage.putIfAbsent(key, () => []).add(now);
+    _lastValues[key] = value; // Selalu update nilai terakhir yang *disimpan*
 
-      if (valueChanged || fifteenMinuteHasPassed) {
-        _dataStorage[key]!.add(value);
-        _timestampStorage[key]!.add(now);
-        _lastValues[key] = value;
-      }
-    }
-
-  // --- PERUBAHAN LOGIKA PEMBERSIHAN DATA ---
-  final oneHourAgo = now.subtract(const Duration(minutes: 60));
-  // Hapus data lama, TAPI sisakan satu titik sebagai "anchor" di luar batas kiri.
-  // Kita periksa titik KEDUA. Jika titik kedua sudah terlalu tua, maka titik pertama aman untuk dihapus.
-    while (_timestampStorage[key]!.length > 1 &&
+    // --- PERUBAHAN LOGIKA PEMBERSIHAN DATA ---
+    // Gunakan 'now' dari timestamp yang konsisten
+    final oneHourAgo = now.subtract(const Duration(minutes: 60)); 
+    // Hapus data lama, TAPI sisakan satu titik sebagai "anchor" di luar batas kiri.
+    // Kita periksa titik KEDUA. Jika titik kedua sudah terlalu tua, maka titik pertama aman untuk dihapus.
+    while (_timestampStorage[key] != null && // Tambahkan null check
+        _timestampStorage[key]!.length > 1 &&
         _timestampStorage[key]![1].isBefore(oneHourAgo)) {
       _timestampStorage[key]!.removeAt(0);
       _dataStorage[key]!.removeAt(0);
@@ -127,10 +118,10 @@ class _DataPageState extends State<DataPage> {
   }
 
   void _updateAllGraphData() {
-  final bluetoothProvider = Provider.of<BluetoothProvider>(context, listen: false);
+    final bluetoothProvider =
+        Provider.of<BluetoothProvider>(context, listen: false);
 
-  // --- PERUBAHAN DIMULAI DI SINI ---
-  // Hanya update data grafik jika ada perangkat yang terhubung
+    // Hanya update data grafik jika ada perangkat yang terhubung
     if (bluetoothProvider.pairedDevice != null) {
       final parameters = [
         'Heart Rate',
@@ -141,9 +132,33 @@ class _DataPageState extends State<DataPage> {
         'Cholesterol'
       ];
 
+      // 1. Kumpulkan semua nilai saat ini ke dalam map
+      final Map<String, double> currentValues = {};
       for (final param in parameters) {
-        final value = getCurrentValue(param, bluetoothProvider);
-        GraphDataStorage.addData(param, value);
+        currentValues[param] = getCurrentValue(param, bluetoothProvider);
+      }
+
+      // 2. Cek apakah ada *satu saja* nilai yang berubah dari yang terakhir disimpan
+      bool anyValueChanged = false;
+      for (final param in parameters) {
+        final lastValue = GraphDataStorage.getLastValue(param);
+        final currentValue = currentValues[param]!;
+
+        // Jika belum ada data (lastValue == null) ATAU nilainya berubah
+        if (lastValue == null || lastValue != currentValue) {
+          anyValueChanged = true;
+          break; // Cukup satu perubahan terdeteksi
+        }
+      }
+
+      // 3. Jika ada perubahan, simpan SEMUA nilai saat ini dengan timestamp yang SAMA
+      if (anyValueChanged) {
+        final now = DateTime.now(); // Buat satu timestamp untuk semua
+        for (final param in parameters) {
+          final value = currentValues[param]!;
+          // Panggil addData dengan timestamp yang konsisten
+          GraphDataStorage.addData(param, value, now);
+        }
       }
     }
   }
@@ -453,7 +468,7 @@ class _HealthDataCardState extends State<HealthDataCard> {
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 100,
+            height: 110,
             child: Row(
               children: [
                 Expanded(
